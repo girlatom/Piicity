@@ -466,15 +466,15 @@ async function renderTrack(city, durationSec, timestamp, reverbAmount=70, softne
    ======================================================== */
 let selectedCity = 'tokyo';
 let selectedDur = 30;
-let liveCtx = null;
 let activeSource = null;
 let activePlayBtn = null;
 let audioUnlocked = false;
 
-// 在使用者第一次點任何東西時就預先建立並 resume AudioContext
-// 這是在 HTTPS 環境（GitHub Pages）下繞過 Autoplay Policy 最可靠的方式
+// 整個頁面生命週期只建立一個 AudioContext——Chrome 有約 6 個的上限
+// 超過就會默默失敗，這是「玩幾次後沒聲音」的根本原因
+const liveCtx = new (window.AudioContext||window.webkitAudioContext)();
+
 function ensureAudioCtx(){
-  if (!liveCtx) liveCtx = new (window.AudioContext||window.webkitAudioContext)();
   if (liveCtx.state === 'suspended') {
     return liveCtx.resume().then(()=>{
       audioUnlocked = true;
@@ -488,7 +488,6 @@ function ensureAudioCtx(){
   return Promise.resolve();
 }
 
-// 頁面任何點擊都嘗試解鎖
 document.addEventListener('click', ensureAudioCtx, { once: false });
 
 function stopActive(){
