@@ -177,7 +177,17 @@
 
 <svg id="digitfield"></svg>
 
-<div class="wrap">
+<div id="unlock-banner" style="
+  position:fixed; bottom:0; left:0; right:0; z-index:999;
+  background:rgba(242,237,224,0.08); backdrop-filter:blur(8px);
+  border-top:1px solid rgba(242,237,224,0.12);
+  padding:14px 24px; text-align:center;
+  font-family:'JetBrains Mono',monospace; font-size:12px;
+  color:rgba(242,237,224,0.6); letter-spacing:0.1em;
+  cursor:pointer;
+" onclick="ensureAudioCtx()">
+  ▶ &nbsp; 點擊頁面任意處以啟用音訊 &nbsp; · &nbsp; Click anywhere to enable audio
+</div>
   <header>
     <div class="eyebrow">π · Digit Universe — Coordinate Demo</div>
     <h1>「在無盡的數列宇宙中，<br>我們終將重逢。」</h1>
@@ -459,6 +469,27 @@ let selectedDur = 30;
 let liveCtx = null;
 let activeSource = null;
 let activePlayBtn = null;
+let audioUnlocked = false;
+
+// 在使用者第一次點任何東西時就預先建立並 resume AudioContext
+// 這是在 HTTPS 環境（GitHub Pages）下繞過 Autoplay Policy 最可靠的方式
+function ensureAudioCtx(){
+  if (!liveCtx) liveCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if (liveCtx.state === 'suspended') {
+    return liveCtx.resume().then(()=>{
+      audioUnlocked = true;
+      const banner = document.getElementById('unlock-banner');
+      if (banner) banner.style.display = 'none';
+    });
+  }
+  audioUnlocked = true;
+  const banner = document.getElementById('unlock-banner');
+  if (banner) banner.style.display = 'none';
+  return Promise.resolve();
+}
+
+// 頁面任何點擊都嘗試解鎖
+document.addEventListener('click', ensureAudioCtx, { once: false });
 
 function stopActive(){
   if (activeSource){
@@ -565,18 +596,16 @@ function addTrackCard(result){
       stopActive();
       return;
     }
-    // 點的是別顆（切換城市）→ 先確實停掉舊的，再播新的
-    stopActive();
+    // 先確保 AudioContext 解鎖（在手勢 call stack 裡同步呼叫）
+    await ensureAudioCtx();
 
-    if (!liveCtx) liveCtx = new (window.AudioContext||window.webkitAudioContext)();
-    if (liveCtx.state === 'suspended') await liveCtx.resume();
-    statusEl.textContent = `AudioContext 狀態：${liveCtx.state}`;
+    // 停掉舊的再播新的
+    stopActive();
 
     const src = liveCtx.createBufferSource();
     src.buffer = result.buffer;
     src.connect(liveCtx.destination);
     src.onended = ()=>{
-      // 播完（不是被手動切歌打斷）才重置按鈕
       if (activeSource === src){
         playBtn.textContent = '▶';
         activeSource = null; activePlayBtn = null;
@@ -586,6 +615,7 @@ function addTrackCard(result){
     playBtn.textContent = '■';
     activeSource = src;
     activePlayBtn = playBtn;
+    statusEl.textContent = `播放中 · AudioContext ${liveCtx.state}`;
   };
 }
 
@@ -613,16 +643,6 @@ genAllBtn.onclick = async ()=>{
   statusEl.textContent = '四座城市，同一組出發時刻，四段完全不同的心跳。';
   genOneBtn.disabled = false; genAllBtn.disabled = false;
 };
-
-/* 全域 fallback：比照 πTIME 正式系統的解法——
-   如果任何一個 AudioContext 卡在 suspended，點擊畫面任何地方都嘗試解鎖 */
-document.addEventListener('click', function(){
-  if (liveCtx && liveCtx.state === 'suspended'){
-    liveCtx.resume().then(()=>{
-      statusEl.textContent = `已透過全域點擊解鎖 AudioContext（狀態：${liveCtx.state}）`;
-    });
-  }
-});
 
 /* 背景數字場（signature element）*/
 (function initDigitField(){
