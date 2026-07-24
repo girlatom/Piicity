@@ -177,16 +177,29 @@
 
 <svg id="digitfield"></svg>
 
-<div id="unlock-banner" style="
-  position:fixed; bottom:0; left:0; right:0; z-index:999;
-  background:rgba(242,237,224,0.08); backdrop-filter:blur(8px);
-  border-top:1px solid rgba(242,237,224,0.12);
-  padding:14px 24px; text-align:center;
-  font-family:'JetBrains Mono',monospace; font-size:12px;
-  color:rgba(242,237,224,0.6); letter-spacing:0.1em;
-  cursor:pointer;
-" onclick="ensureAudioCtx()">
-  ▶ &nbsp; 點擊頁面任意處以啟用音訊 &nbsp; · &nbsp; Click anywhere to enable audio
+<div id="unlock-overlay" style="
+  position:fixed; inset:0; z-index:9999;
+  background:rgba(12,13,20,0.97);
+  display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  gap:28px; cursor:pointer;
+" onclick="unlockAudio()">
+  <div style="font-family:'Cormorant Garamond',serif; font-style:italic; font-size:clamp(22px,4vw,34px); color:#f2ede0; text-align:center; line-height:1.6; padding:0 32px;">
+    在無盡的數列宇宙中<br>我們終將重逢
+  </div>
+  <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:rgba(242,237,224,0.45); letter-spacing:0.2em; text-transform:uppercase;">
+    π · Digit Universe
+  </div>
+  <div style="
+    margin-top:12px;
+    border:1px solid rgba(242,237,224,0.25); border-radius:2px;
+    padding:14px 36px;
+    font-family:'JetBrains Mono',monospace; font-size:13px;
+    color:#f2ede0; letter-spacing:0.15em;
+  ">▶ &nbsp; 點此進入</div>
+  <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:rgba(242,237,224,0.2); letter-spacing:0.1em; margin-top:4px;">
+    Tap to enter · 音訊需要使用者授權
+  </div>
 </div>
   <header>
     <div class="eyebrow">π · Digit Universe — Coordinate Demo</div>
@@ -474,17 +487,24 @@ let audioUnlocked = false;
 // 超過就會默默失敗，這是「玩幾次後沒聲音」的根本原因
 const liveCtx = new (window.AudioContext||window.webkitAudioContext)();
 
+// iOS/iPadOS 要求：resume() 必須在使用者手勢的同步 call stack 裡執行
+// 用全螢幕覆蓋層確保第一個動作就是手勢觸發的 resume()
+function unlockAudio(){
+  liveCtx.resume().then(()=>{
+    audioUnlocked = true;
+    document.getElementById('unlock-overlay').style.display = 'none';
+  }).catch(e => {
+    // 萬一 resume 失敗，還是隱藏覆蓋層讓使用者繼續操作
+    document.getElementById('unlock-overlay').style.display = 'none';
+    console.warn('AudioContext resume failed:', e);
+  });
+}
+
 function ensureAudioCtx(){
   if (liveCtx.state === 'suspended') {
-    return liveCtx.resume().then(()=>{
-      audioUnlocked = true;
-      const banner = document.getElementById('unlock-banner');
-      if (banner) banner.style.display = 'none';
-    });
+    return liveCtx.resume().then(()=>{ audioUnlocked = true; });
   }
   audioUnlocked = true;
-  const banner = document.getElementById('unlock-banner');
-  if (banner) banner.style.display = 'none';
   return Promise.resolve();
 }
 
