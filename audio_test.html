@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>π Audio Test</title>
+<style>
+  body { background:#111; color:#eee; font-family:monospace; padding:32px 20px; font-size:15px; line-height:2; }
+  button { background:#eee; color:#111; border:none; padding:16px 32px; font-size:16px; border-radius:4px; cursor:pointer; margin:12px 0; display:block; width:100%; }
+  .log { background:#1a1a1a; padding:16px; border-radius:4px; margin-top:20px; white-space:pre-wrap; font-size:13px; color:#aaa; min-height:80px; }
+  .ok { color:#7fb3bf; }
+  .err { color:#c97b63; }
+</style>
+</head>
+<body>
+<h2>π · 音訊診斷</h2>
+<p>依序點擊以下按鈕，把結果截圖給我：</p>
+
+<button onclick="test1()">1. 建立 AudioContext</button>
+<button onclick="test2()">2. Resume AudioContext</button>
+<button onclick="test3()">3. 播放一個測試音（嗶一聲）</button>
+<button onclick="test4()">4. 用 OfflineAudioContext 渲染後播放</button>
+
+<div class="log" id="log">等待測試...</div>
+
+<script>
+let ctx = null;
+const log = document.getElementById('log');
+
+function addLog(msg, ok){
+  const line = document.createElement('div');
+  line.className = ok === true ? 'ok' : ok === false ? 'err' : '';
+  line.textContent = `[${new Date().toISOString().slice(11,19)}] ${msg}`;
+  log.appendChild(line);
+}
+
+function test1(){
+  try {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    addLog(`✓ AudioContext 建立成功，state = ${ctx.state}`, true);
+    addLog(`  sampleRate = ${ctx.sampleRate}`, true);
+  } catch(e) {
+    addLog(`✗ AudioContext 建立失敗: ${e.message}`, false);
+  }
+}
+
+function test2(){
+  if (!ctx){ addLog('✗ 請先執行步驟 1', false); return; }
+  addLog(`Resume 前 state = ${ctx.state}`);
+  ctx.resume().then(()=>{
+    addLog(`✓ resume() 成功，state = ${ctx.state}`, true);
+  }).catch(e=>{
+    addLog(`✗ resume() 失敗: ${e.message}`, false);
+  });
+}
+
+function test3(){
+  if (!ctx){ addLog('✗ 請先執行步驟 1 和 2', false); return; }
+  addLog(`播放前 state = ${ctx.state}`);
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 440;
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.8);
+    addLog('✓ 音符已排程（你應該聽到一聲嗶）', true);
+    osc.onended = () => addLog('✓ 音符播放完畢', true);
+  } catch(e) {
+    addLog(`✗ 播放失敗: ${e.message}`, false);
+  }
+}
+
+async function test4(){
+  if (!ctx){ addLog('✗ 請先執行步驟 1 和 2', false); return; }
+  addLog('開始 OfflineAudioContext 渲染...');
+  try {
+    const offline = new OfflineAudioContext(1, 44100 * 2, 44100);
+    const osc = offline.createOscillator();
+    const gain = offline.createGain();
+    osc.frequency.value = 330;
+    gain.gain.setValueAtTime(0.5, 0);
+    gain.gain.exponentialRampToValueAtTime(0.001, 1.8);
+    osc.connect(gain);
+    gain.connect(offline.destination);
+    osc.start(0);
+    osc.stop(1.8);
+
+    const buffer = await offline.startRendering();
+    addLog(`✓ 渲染完成，buffer 長度: ${buffer.length} samples`, true);
+
+    // 確認 buffer 有聲音
+    const data = buffer.getChannelData(0);
+    let max = 0;
+    for(let i=0;i<data.length;i++) if(Math.abs(data[i])>max) max=Math.abs(data[i]);
+    addLog(`  最大振幅: ${max.toFixed(4)}（> 0 代表有聲音）`, max > 0);
+
+    // 用 liveCtx 播放
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.connect(ctx.destination);
+    src.start();
+    addLog('✓ 渲染結果播放中（你應該聽到一個低音）', true);
+    src.onended = () => addLog('✓ 播放完畢', true);
+  } catch(e) {
+    addLog(`✗ 步驟 4 失敗: ${e.message}`, false);
+  }
+}
+</script>
+</body>
+</html>
